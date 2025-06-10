@@ -10,12 +10,16 @@ namespace Pong
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
 
+        bool isGameOver;
+
         Texture2D ballTexture;
+        Texture2D pixelTexture;
         Vector2 ballPosition;
         Vector2 ballSpeedVector;
         float ballSpeed;
-        double remainderX;
-        double remainderY;
+
+        Vector2 pl1BatPosition;
+        Vector2 pl2BatPosition;
 
         public Game()
         {
@@ -28,15 +32,13 @@ namespace Pong
         {
             ballPosition = new Vector2(_graphics.PreferredBackBufferWidth / 2,
                                        _graphics.PreferredBackBufferHeight / 2);
-            ballSpeed = 100f;
+            ballSpeed = 400f;
+            ballSpeedVector = new Vector2(1, -1);
 
-            //TODO: инициализирайте вектора на скоростта ballSpeedVector, за да зададете началната посока на движение
-             Random random = new Random();
-            float angle = (float)(random.NextDouble() * MathHelper.TwoPi);
-            ballSpeedVector  = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle)) * ballSpeed;
+            pl1BatPosition = new Vector2(30, _graphics.PreferredBackBufferHeight / 2 - 30);
+            pl2BatPosition = new Vector2(_graphics.PreferredBackBufferWidth - 40, _graphics.PreferredBackBufferHeight / 2 - 30);
 
-            
-
+            isGameOver = false;
 
             base.Initialize();
         }
@@ -45,50 +47,87 @@ namespace Pong
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
             ballTexture = Content.Load<Texture2D>("ball");
+
+
+            pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
+            pixelTexture.SetData(new[] { Color.White });
+        }
+
+        private void checkBallCollision()
+        {
+            Rectangle ballRect = new Rectangle(
+                (int)(ballPosition.X - ballTexture.Width / 2),
+                (int)(ballPosition.Y - ballTexture.Height / 2),
+                ballTexture.Width, ballTexture.Height
+            );
+
+            Rectangle bat1Rect = new Rectangle((int)pl1BatPosition.X, (int)pl1BatPosition.Y, 10, 60);
+            Rectangle bat2Rect = new Rectangle((int)pl2BatPosition.X, (int)pl2BatPosition.Y, 10, 60);
+
+
+            if (ballPosition.X < 0 || ballPosition.X > _graphics.PreferredBackBufferWidth)
+            {
+                isGameOver = true;
+            }
+
+
+            if (ballPosition.Y < 0 || ballPosition.Y > _graphics.PreferredBackBufferHeight)
+            {
+                ballSpeedVector.Y *= -1;
+            }
+
+
+            if (ballRect.Intersects(bat1Rect) || ballRect.Intersects(bat2Rect))
+            {
+                ballSpeedVector.X *= -1;
+            }
+        }
+
+        private void updateBallPosition(float updatedBallSpeed)
+        {
+            float ratio = this.ballSpeedVector.X / this.ballSpeedVector.Y;
+            float deltaY = updatedBallSpeed / (float)Math.Sqrt(1 + ratio * ratio);
+            float deltaX = Math.Abs(ratio * deltaY);
+
+            ballPosition.X += (ballSpeedVector.X > 0) ? deltaX : -deltaX;
+            ballPosition.Y += (ballSpeedVector.Y > 0) ? deltaY : -deltaY;
+        }
+
+        private void updateBatsPositions()
+        {
+            var kstate = Keyboard.GetState();
+            float speed = 5f;
+
+
+            if (kstate.IsKeyDown(Keys.W))
+                pl1BatPosition.Y -= speed;
+            if (kstate.IsKeyDown(Keys.S))
+                pl1BatPosition.Y += speed;
+
+
+            if (kstate.IsKeyDown(Keys.Up))
+                pl2BatPosition.Y -= speed;
+            if (kstate.IsKeyDown(Keys.Down))
+                pl2BatPosition.Y += speed;
+
+
+            pl1BatPosition.Y = Math.Clamp(pl1BatPosition.Y, 0, _graphics.PreferredBackBufferHeight - 60);
+            pl2BatPosition.Y = Math.Clamp(pl2BatPosition.Y, 0, _graphics.PreferredBackBufferHeight - 60);
         }
 
         protected override void Update(GameTime gameTime)
         {
-            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
+            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed ||
+                Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
 
-            float updatedBallSpeed = ballSpeed * (float)gameTime.ElapsedGameTime.TotalSeconds;
-
-
-            ballPosition.X += ballSpeedVector.X * updatedBallSpeed / ballSpeed;
-            ballPosition.Y += ballSpeedVector.Y * updatedBallSpeed / ballSpeed;
-
-            //TODO: Изменете ballPosition.X и ballPosition.Y в зависимост от посоката на движение
-
-            //TODO: Натрупайте остатъците получени от закръглянето в променливите remainderX и remainderY
-
-
-            //TODO: Ако картинката напуска границите на екрана, това означава, че топката се е "ударила" в края на екрана и трябва да
-            //промени посоката си на движение. За целта трябва да промените вектора ballSpeedVector.
-
-             
-            if (ballPosition.X > _graphics.PreferredBackBufferWidth - ballTexture.Width / 2)
+            if (!isGameOver)
             {
-                
-                ballSpeedVector.X = ballSpeedVector.X * -1;
+                float updatedBallSpeed = ballSpeed * (float)gameTime.ElapsedGameTime.TotalSeconds;
+                checkBallCollision();
+                updateBallPosition(updatedBallSpeed);
+                updateBatsPositions();
             }
-            else if (ballPosition.X < ballTexture.Width / 2)
-            {
-                ballSpeedVector.X = ballSpeedVector.X * -1;
-                
-            }
-
-            if (ballPosition.Y > _graphics.PreferredBackBufferHeight - ballTexture.Height / 2)
-            {
-
-                ballSpeedVector.Y = -ballSpeedVector.Y;
-            }
-            else if (ballPosition.Y < ballTexture.Height / 2)
-            {
-                ballSpeedVector.Y = ballSpeedVector.Y * -1;
-
-            }
-
 
             base.Update(gameTime);
         }
@@ -98,6 +137,8 @@ namespace Pong
             GraphicsDevice.Clear(Color.CornflowerBlue);
 
             _spriteBatch.Begin();
+
+
             _spriteBatch.Draw(
                 ballTexture,
                 ballPosition,
@@ -109,6 +150,17 @@ namespace Pong
                 SpriteEffects.None,
                 0f
             );
+
+
+            _spriteBatch.Draw(pixelTexture, new Rectangle((int)pl1BatPosition.X, (int)pl1BatPosition.Y, 20, 90), Color.Black);
+            _spriteBatch.Draw(pixelTexture, new Rectangle((int)pl2BatPosition.X, (int)pl2BatPosition.Y, 20, 90), Color.Blue);
+
+
+            if (isGameOver)
+            {
+
+            }
+
             _spriteBatch.End();
 
             base.Draw(gameTime);
